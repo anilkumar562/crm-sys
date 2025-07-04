@@ -2,7 +2,7 @@
 
 ### tickets table
 
-```sql
+```postgresql
 CREATE TABLE tickets (
     id SERIAL PRIMARY KEY,
     ticket_date DATE,
@@ -21,7 +21,7 @@ CREATE TABLE tickets (
     agent VARCHAR(100),
     status VARCHAR(20)
 );
-
+```
 
 ### ticket_logs table
 
@@ -35,3 +35,4 @@ CREATE TABLE ticket_logs (
     comment TEXT,                         
     by_user VARCHAR(100) NOT NULL        
  );
+```

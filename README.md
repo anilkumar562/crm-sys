@@ -2,6 +2,7 @@
 
 ### tickets table
 
+```sql
 CREATE TABLE tickets (
     id SERIAL PRIMARY KEY,
     ticket_date DATE,
@@ -20,4 +21,3 @@ CREATE TABLE tickets (
     agent VARCHAR(100),
     status VARCHAR(20)
 );
-

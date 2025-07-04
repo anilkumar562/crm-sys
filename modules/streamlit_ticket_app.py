@@ -118,26 +118,154 @@ def insert_ticket(data):
             conn.commit()
 
 
-def show():
+def fetch_ticket_by_id(ticket_id):
+    with get_connection() as conn:
+        df = pd.read_sql("SELECT * FROM tickets WHERE id=%s", conn, params=(ticket_id,))
+    return df.iloc[0] if not df.empty else None
 
-    # Initialize session state
+def update_ticket_status_remark(ticket_id, status, operational_remark):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tickets SET status=%s, operational_remark=%s WHERE id=%s",
+                (status, operational_remark, ticket_id)
+            )
+            conn.commit()
+
+def get_open_ticket_by_order(order_number):
+    with get_connection() as conn:
+        df = pd.read_sql(
+            "SELECT * FROM tickets WHERE order_number=%s AND status='Open' ORDER BY id DESC",
+            conn,
+            params=(order_number,)
+        )
+    return df.iloc[0] if not df.empty else None
+
+def show():
     if 'show_create_ticket' not in st.session_state:
         st.session_state.show_create_ticket = False
+    if 'view_ticket_id' not in st.session_state:
+        st.session_state.view_ticket_id = None
 
-    # Show tickets table or create ticket form based on session state
+    if st.session_state.view_ticket_id:
+        # ----------- VIEW/EDIT TICKET PAGE -----------
+        ticket = fetch_ticket_by_id(st.session_state.view_ticket_id)
+        if ticket is None:
+            st.error("Ticket not found.")
+            st.session_state.view_ticket_id = None
+            st.rerun()
+        st.subheader(f"🎫 Ticket #{ticket['id']} Details")
+        st.markdown("---")
+
+        # Ticket Date (disabled) - moved above Order Number
+        st.text_input("Ticket Date", value=str(ticket['ticket_date']), disabled=True)
+
+        # Order Number (disabled)
+        st.text_input("Order Number", value=ticket['order_number'], disabled=True)
+
+        # QC ON/OFF and Priority side by side (disabled)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.selectbox("QC ON/OFF", [True, False], index=0 if ticket['qc_on_off'] else 1, disabled=True)
+        with col2:
+            st.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(ticket['priority']), disabled=True)
+
+        # Query Source and Agent side by side (disabled)
+        col3, col4 = st.columns(2)
+        with col3:
+            st.selectbox("Query Source", QUERY_SOURCES, index=QUERY_SOURCES.index(ticket['query_source']), disabled=True)
+        with col4:
+            st.text_input("Agent", value=ticket['agent'], disabled=True)
+
+        # Query Type, Reason, Sub Reason (disabled)
+        st.selectbox("Query Type", list(QUERY_TYPE_REASON_SUBREASON.keys()), index=list(QUERY_TYPE_REASON_SUBREASON.keys()).index(ticket['query_type']), disabled=True)
+        reason_options = list(QUERY_TYPE_REASON_SUBREASON.get(ticket['query_type'], {}).keys())
+        if reason_options:
+            st.selectbox("Reason", reason_options, index=reason_options.index(ticket['reason']), disabled=True)
+        else:
+            st.text_input("Reason", value=ticket['reason'], disabled=True)
+        if reason_options and ticket['reason']:
+            sub_reason_options = QUERY_TYPE_REASON_SUBREASON.get(ticket['query_type'], {}).get(ticket['reason'], [])
+            if sub_reason_options:
+                st.selectbox("Sub Reason", sub_reason_options, index=sub_reason_options.index(ticket['sub_reason']) if ticket['sub_reason'] in sub_reason_options else 0, disabled=True)
+            else:
+                st.text_input("Sub Reason (if any)", value=ticket['sub_reason'], disabled=True)
+        else:
+            st.text_input("Sub Reason (if any)", value=ticket['sub_reason'], disabled=True)
+
+        # Customer Comment and Remark side by side (disabled)
+        col5, col6 = st.columns(2)
+        with col5:
+            st.text_area("Customer Comment", value=ticket['customer_comment'], disabled=True)
+        with col6:
+            st.text_area("Remark", value=ticket['remark'], disabled=True)
+
+        # Operational Remark (editable)
+        operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "")
+
+        # Status (editable)
+        status = st.selectbox(
+            "Status",
+            ["Open", "Closed", "Pending", "Resolved"],
+            index=["Open", "Closed", "Pending", "Resolved"].index(ticket['status']) if ticket['status'] in ["Open", "Closed", "Pending", "Resolved"] else 0
+        )
+
+        st.markdown("---")
+        col1, col2, col3 = st.columns([2, 2, 6])
+        with col1:
+            if st.button("💾 Update Ticket", use_container_width=True):
+                update_ticket_status_remark(int(ticket['id']), status, operational_remark)
+                st.success("Ticket updated successfully!")
+                st.session_state.view_ticket_id = None
+                st.rerun()
+        with col2:
+            if st.button("⬅️ Back", use_container_width=True):
+                st.session_state.view_ticket_id = None
+                st.rerun()
+        st.markdown("---")
+        return
+
+    # ----------- MAIN/CREATE TICKET PAGE -----------
     if not st.session_state.show_create_ticket:
-        # Main page with view tickets
         st.subheader("All Tickets")
-        
-        # Create ticket button
         if st.button("➕ Create New Ticket"):
             st.session_state.show_create_ticket = True
             st.rerun()
-        
-        # Display tickets
         tickets = fetch_tickets()
-        st.dataframe(tickets, hide_index=True, use_container_width=True)
-
+        if not tickets.empty:
+            tickets = tickets.copy()
+            tickets['View'] = tickets['id'].apply(lambda tid: f"view_{tid}")
+            # Add top border
+            st.markdown('<hr style="border:2px solid #bbb; margin-top:0; margin-bottom:10px;">', unsafe_allow_html=True)
+            # Header row
+            header_cols = st.columns([1, 2, 2, 2, 2, 2, 1])
+            header_cols[0].markdown("**Ticket No**")
+            header_cols[1].markdown("**Order Number**")
+            header_cols[2].markdown("**Query Type**")
+            header_cols[3].markdown("**Reason**")
+            header_cols[4].markdown("**Status**")
+            header_cols[5].markdown("**Ticket Date**")
+            header_cols[6].markdown("**Action**")
+            # Ticket rows with 1px border between
+            for idx, row in tickets.iterrows():
+                st.markdown(
+                    '<div style="border-top:1px solid #ddd; margin-top:0; margin-bottom:0;"></div>',
+                    unsafe_allow_html=True
+                )
+                cols = st.columns([1, 2, 2, 2, 2, 2, 1])
+                cols[0].write(row['id'])  # Ticket No
+                cols[1].write(row['order_number'])
+                cols[2].write(row['query_type'])
+                cols[3].write(row['reason'])
+                cols[4].write(row['status'])
+                cols[5].write(str(row['ticket_date']))
+                if cols[6].button("View", key=f"viewbtn_{row['id']}"):
+                    st.session_state.view_ticket_id = row['id']
+                    st.rerun()
+            # Add bottom border
+            st.markdown('<hr style="border:2px solid #bbb; margin-top:10px; margin-bottom:0;">', unsafe_allow_html=True)
+        else:
+            st.info("No tickets found.")
     else:
         # Create ticket page
         st.subheader("🎫 Create New Ticket")
@@ -161,69 +289,94 @@ def show():
         # Create ticket form
         order_number = st.text_input("Order Number")
         
-        # QC ON/OFF and Priority side by side
-        col1, col2 = st.columns(2)
-        with col1:
-            qc_on_off = st.selectbox("QC ON/OFF", [True, False])
-        with col2:
-            priority = st.selectbox("Priority", ["Low", "Medium", "High"])
-        
-        # Query Source and Agent side by side
-        col3, col4 = st.columns(2)
-        with col3:
-            query_source = st.selectbox("Query Source", QUERY_SOURCES)
-        with col4:
-            # Auto-populate agent field with logged in user
-            agent = st.text_input("Agent", value=logged_in_user)
-        
-        # Dynamic fields for real-time updates
-        query_type = st.selectbox("Query Type", list(QUERY_TYPE_REASON_SUBREASON.keys()))
-        
-        # Get reason options based on selected query type
-        reason_options = list(QUERY_TYPE_REASON_SUBREASON.get(query_type, {}).keys())
-        if reason_options:
-            reason = st.selectbox("Reason", reason_options)
-        else:
-            reason = st.text_input("Reason")
-        
-        # Dynamic Sub Reason based on Query Type and Reason
-        if reason_options and reason:
-            sub_reason_options = QUERY_TYPE_REASON_SUBREASON.get(query_type, {}).get(reason, [])
-            if sub_reason_options:
-                sub_reason = st.selectbox("Sub Reason", sub_reason_options)
+        # Check for existing open ticket for this order number
+        open_ticket = None
+        if order_number:
+            open_ticket = get_open_ticket_by_order(order_number)
+            # Also check for Pending status
+            if open_ticket is None:
+                with get_connection() as conn:
+                    df_pending = pd.read_sql(
+                        "SELECT * FROM tickets WHERE order_number=%s AND status='Pending' ORDER BY id DESC",
+                        conn,
+                        params=(order_number,)
+                    )
+                if not df_pending.empty:
+                    open_ticket = df_pending.iloc[0]
+            if open_ticket is not None:
+                st.warning(
+                    f"Ticket already open for this Order Number! (Ticket No: {open_ticket['id']}, Status: {open_ticket['status']})"
+                )
+                if st.button("View Open Ticket", key="view_open_ticket"):
+                    st.session_state.show_create_ticket = False
+                    st.session_state.view_ticket_id = int(open_ticket['id'])
+                    st.rerun()
+
+        # Only show the rest of the form if no open or pending ticket exists for this order number
+        if open_ticket is None:
+            # QC ON/OFF and Priority side by side
+            col1, col2 = st.columns(2)
+            with col1:
+                qc_on_off = st.selectbox("QC ON/OFF", [True, False])
+            with col2:
+                priority = st.selectbox("Priority", ["Low", "Medium", "High"])
+            
+            # Query Source and Agent side by side
+            col3, col4 = st.columns(2)
+            with col3:
+                query_source = st.selectbox("Query Source", QUERY_SOURCES)
+            with col4:
+                # Auto-populate agent field with logged in user
+                agent = st.text_input("Agent", value=logged_in_user)
+            
+            # Dynamic fields for real-time updates
+            query_type = st.selectbox("Query Type", list(QUERY_TYPE_REASON_SUBREASON.keys()))
+            
+            # Get reason options based on selected query type
+            reason_options = list(QUERY_TYPE_REASON_SUBREASON.get(query_type, {}).keys())
+            if reason_options:
+                reason = st.selectbox("Reason", reason_options)
+            else:
+                reason = st.text_input("Reason")
+            
+            # Dynamic Sub Reason based on Query Type and Reason
+            if reason_options and reason:
+                sub_reason_options = QUERY_TYPE_REASON_SUBREASON.get(query_type, {}).get(reason, [])
+                if sub_reason_options:
+                    sub_reason = st.selectbox("Sub Reason", sub_reason_options)
+                else:
+                    sub_reason = st.text_input("Sub Reason (if any)")
             else:
                 sub_reason = st.text_input("Sub Reason (if any)")
-        else:
-            sub_reason = st.text_input("Sub Reason (if any)")
+            
+            # Customer Comment and Remark side by side
+            col5, col6 = st.columns(2)
+            with col5:
+                customer_comment = st.text_area("Customer Comment")
+            with col6:
+                remark = st.text_area("Remark")
+            
+            # Operational Remark (full width)
+            operational_remark = st.text_area("Operational Remark")
+            status = "Open"  # Always set to Open for new tickets
+            
+            st.markdown("---")
+            
+            # Submit and Cancel buttons
+            col1, col2, col3 = st.columns([2, 2, 6])
+            with col1:
+                if st.button("✅ Submit Ticket", use_container_width=True):
+                    # Auto-calculate case_count
+                    case_count = get_next_case_count(order_number) if order_number else 1
+                    insert_ticket((
+                        ticket_date, order_number, agent_name, qc_on_off, priority, query_source, query_type,
+                        reason, sub_reason, customer_comment, remark, case_count, operational_remark, agent, status
+                    ))
+                    st.success("Ticket created successfully!")
+                    st.session_state.show_create_ticket = False
+                    st.rerun()
         
-        # Customer Comment and Remark side by side
-        col5, col6 = st.columns(2)
-        with col5:
-            customer_comment = st.text_area("Customer Comment")
-        with col6:
-            remark = st.text_area("Remark")
-        
-        # Operational Remark (full width)
-        operational_remark = st.text_area("Operational Remark")
-        status = "Open"  # Always set to Open for new tickets
-        
-        st.markdown("---")
-        
-        # Submit and Cancel buttons
-        col1, col2, col3 = st.columns([2, 2, 6])
-        with col1:
-            if st.button("✅ Submit Ticket", use_container_width=True):
-                # Auto-calculate case_count
-                case_count = get_next_case_count(order_number) if order_number else 1
-                insert_ticket((
-                    ticket_date, order_number, agent_name, qc_on_off, priority, query_source, query_type,
-                    reason, sub_reason, customer_comment, remark, case_count, operational_remark, agent, status
-                ))
-                st.success("Ticket created successfully!")
-                st.session_state.show_create_ticket = False
-                st.rerun()
-    
-        with col2:
-            if st.button("❌ Cancel", use_container_width=True):
-                st.session_state.show_create_ticket = False
-                st.rerun()
+            with col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_create_ticket = False
+                    st.rerun()

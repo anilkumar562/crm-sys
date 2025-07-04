@@ -1,5 +1,7 @@
 # crm-sys
 
+### tickets table
+
 CREATE TABLE tickets (
     id SERIAL PRIMARY KEY,
     ticket_date DATE,

@@ -141,6 +141,18 @@ def get_open_ticket_by_order(order_number):
         )
     return df.iloc[0] if not df.empty else None
 
+def insert_ticket_log(ticket_id, order_number, action, comment, by_user):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_logs (ticket_id, order_number, log_time, action, comment, by_user)
+                VALUES (%s, %s, NOW(), %s, %s, %s)
+                """,
+                (ticket_id, order_number, action, comment, by_user)
+            )
+            conn.commit()
+
 def show():
     if 'show_create_ticket' not in st.session_state:
         st.session_state.show_create_ticket = False
@@ -214,7 +226,35 @@ def show():
         col1, col2, col3 = st.columns([2, 2, 6])
         with col1:
             if st.button("💾 Update Ticket", use_container_width=True):
+                # Get logged in user
+                logged_in_user = st.session_state.get('user_name', 'Unknown User')
+                
+                # Check if status or operational_remark changed
+                status_changed = ticket['status'] != status
+                remark_changed = (ticket['operational_remark'] or '') != operational_remark
+                
+                # Update the ticket
                 update_ticket_status_remark(int(ticket['id']), status, operational_remark)
+                
+                # Log the changes
+                if status_changed:
+                    insert_ticket_log(
+                        ticket_id=int(ticket['id']),
+                        order_number=ticket['order_number'],
+                        action=f"Status changed from {ticket['status']} to {status}",
+                        comment=f"Status updated by {logged_in_user}",
+                        by_user=logged_in_user
+                    )
+                
+                if remark_changed:
+                    insert_ticket_log(
+                        ticket_id=int(ticket['id']),
+                        order_number=ticket['order_number'],
+                        action="Operational Remark updated",
+                        comment=operational_remark,
+                        by_user=logged_in_user
+                    )
+                
                 st.success("Ticket updated successfully!")
                 st.session_state.view_ticket_id = None
                 st.rerun()
@@ -222,6 +262,57 @@ def show():
             if st.button("⬅️ Back", use_container_width=True):
                 st.session_state.view_ticket_id = None
                 st.rerun()
+        st.markdown("---")
+        
+        # Add comment section (moved above logs)
+        st.subheader("Add Comment")
+        col_comment, col_send = st.columns([4, 1])
+        with col_comment:
+            new_comment = st.text_input("Comment", placeholder="Add a comment...")
+        with col_send:
+            st.markdown("<br>", unsafe_allow_html=True)  # Add spacing to align with text input
+            if st.button("Send", use_container_width=True):
+                if new_comment.strip():
+                    logged_in_user = st.session_state.get('user_name', 'Unknown User')
+                    insert_ticket_log(
+                        ticket_id=int(ticket['id']),
+                        order_number=ticket['order_number'],
+                        action="Comment added",
+                        comment=new_comment,
+                        by_user=logged_in_user
+                    )
+                    # st.success("Comment added successfully!")
+                    st.rerun()
+                else:
+                    st.warning("Please enter a comment.")
+        
+        st.markdown("---")
+        logs = None
+        with get_connection() as conn:
+            logs = pd.read_sql(
+                "SELECT log_time, action, comment, by_user FROM ticket_logs WHERE ticket_id=%s ORDER BY log_time DESC",
+                conn,
+                params=(int(ticket['id']),)
+            )
+        if logs is not None and not logs.empty:
+            for idx, log in logs.iterrows():
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <b>{log['log_time'].strftime('%Y-%m-%d %H:%M:%S')}</b> | <b>{log['action']}</b><br>
+                            <span style="color:#555;">{log['comment'] if log['comment'] else ''}</span>
+                        </div>
+                        <div style="text-align:right; font-weight:bold; color:#666;">
+                            {log['by_user']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info("No logs for this ticket yet.")
+
         st.markdown("---")
         return
 
@@ -373,6 +464,21 @@ def show():
                         reason, sub_reason, customer_comment, remark, case_count, operational_remark, agent, status
                     ))
                     st.success("Ticket created successfully!")
+                    
+                    # Get the last inserted ticket id
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT id FROM tickets WHERE order_number=%s ORDER BY id DESC LIMIT 1", (order_number,))
+                            new_ticket_id = cur.fetchone()[0]
+
+                    insert_ticket_log(
+                        ticket_id=new_ticket_id,
+                        order_number=order_number,
+                        action="Created",
+                        comment="Ticket created",
+                        by_user=logged_in_user
+                    )
+                    
                     st.session_state.show_create_ticket = False
                     st.rerun()
         

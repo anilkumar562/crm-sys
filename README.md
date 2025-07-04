@@ -21,3 +21,17 @@ CREATE TABLE tickets (
     agent VARCHAR(100),
     status VARCHAR(20)
 );
+
+
+### ticket_logs table
+
+```postgresql
+CREATE TABLE ticket_logs (
+    id SERIAL PRIMARY KEY,
+    ticket_id INTEGER NOT NULL,
+    order_number VARCHAR(50),             
+    log_time TIMESTAMP NOT NULL,
+    action VARCHAR(50) NOT NULL,          
+    comment TEXT,                         
+    by_user VARCHAR(100) NOT NULL        
+ );

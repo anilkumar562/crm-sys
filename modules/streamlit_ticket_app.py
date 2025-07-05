@@ -2,6 +2,7 @@ import streamlit as st
 import psycopg2
 import pandas as pd
 from datetime import datetime
+import os
 
 # Database connection details
 DB_HOST = "localhost"
@@ -153,6 +154,80 @@ def insert_ticket_log(ticket_id, order_number, action, comment, by_user):
             )
             conn.commit()
 
+def save_uploaded_file(uploaded_file, ticket_id):
+    """Save uploaded file to local filesystem and return the file path"""
+    if uploaded_file is not None:
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads"
+        if not os.path.exists(upload_dir):
+            os.makedirs(upload_dir)
+        
+        # Generate unique filename with ticket ID and timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = uploaded_file.name.split('.')[-1]
+        filename = f"ticket_{ticket_id}_{timestamp}.{file_extension}"
+        file_path = os.path.join(upload_dir, filename)
+        
+        # Save the file
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        return file_path
+    return None
+
+def save_file_to_database(uploaded_file, ticket_id, uploaded_by):
+    """Save uploaded file to database and return the attachment ID"""
+    if uploaded_file is not None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Get file info
+                file_data = uploaded_file.getbuffer()
+                file_name = uploaded_file.name
+                file_type = uploaded_file.type if uploaded_file.type else file_name.split('.')[-1]
+                file_size = len(file_data)
+                
+                # Insert into database
+                cur.execute("""
+                    INSERT INTO ticket_attachments 
+                    (ticket_id, file_name, file_type, file_size, uploaded_at, uploaded_by, file_data)
+                    VALUES (%s, %s, %s, %s, NOW(), %s, %s)
+                    RETURNING id
+                """, (ticket_id, file_name, file_type, file_size, uploaded_by, file_data))
+                
+                attachment_id = cur.fetchone()[0]
+                conn.commit()
+                return attachment_id
+    return None
+
+def get_ticket_attachments(ticket_id):
+    """Get all attachments for a ticket (without file data)"""
+    with get_connection() as conn:
+        df = pd.read_sql("""
+            SELECT id, file_name, file_type, file_size, uploaded_at, uploaded_by 
+            FROM ticket_attachments 
+            WHERE ticket_id=%s 
+            ORDER BY uploaded_at DESC
+        """, conn, params=(ticket_id,))
+    return df
+
+def download_attachment(attachment_id):
+    """Download attachment file data from database"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT file_name, file_type, file_data 
+                FROM ticket_attachments 
+                WHERE id=%s
+            """, (attachment_id,))
+            result = cur.fetchone()
+            if result:
+                file_name, file_type, file_data = result
+                # Convert memoryview to bytes
+                if isinstance(file_data, memoryview):
+                    file_data = file_data.tobytes()
+                return file_name, file_type, file_data
+    return None, None, None
+
 def show():
     if 'show_create_ticket' not in st.session_state:
         st.session_state.show_create_ticket = False
@@ -214,6 +289,9 @@ def show():
 
         # Operational Remark (editable)
         operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "")
+        
+        # File attachment (same width as Operational Remark)
+        uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png'], key="file_uploader")
 
         # Status (editable)
         status = st.selectbox(
@@ -235,6 +313,19 @@ def show():
                 
                 # Update the ticket
                 update_ticket_status_remark(int(ticket['id']), status, operational_remark)
+                
+                # Handle file upload if a file is attached
+                if uploaded_file is not None:
+                    # Save the file to database and get the attachment ID
+                    attachment_id = save_file_to_database(uploaded_file, int(ticket['id']), logged_in_user)
+                    # Log the file attachment
+                    insert_ticket_log(
+                        ticket_id=int(ticket['id']),
+                        order_number=ticket['order_number'],
+                        action="File attached during ticket update",
+                        comment=f"File attached: {uploaded_file.name}, Attachment ID: {attachment_id}",
+                        by_user=logged_in_user
+                    )
                 
                 # Log the changes
                 if status_changed:
@@ -266,25 +357,61 @@ def show():
         
         # Add comment section (moved above logs)
         st.subheader("Add Comment")
-        col_comment, col_send = st.columns([4, 1])
+        col_comment, col_send = st.columns([6, 1])
         with col_comment:
             new_comment = st.text_input("Comment", placeholder="Add a comment...")
         with col_send:
             st.markdown("<br>", unsafe_allow_html=True)  # Add spacing to align with text input
             if st.button("Send", use_container_width=True):
-                if new_comment.strip():
+                if new_comment.strip() or uploaded_file is not None:
                     logged_in_user = st.session_state.get('user_name', 'Unknown User')
+                    
+                    # Prepare comment with file info if file is uploaded
+                    comment_text = new_comment
+                    if uploaded_file is not None:
+                        # Save the file to database and get the attachment ID
+                        attachment_id = save_file_to_database(uploaded_file, int(ticket['id']), logged_in_user)
+                        comment_text += f" [File attached: {uploaded_file.name}, Attachment ID: {attachment_id}]"
+                    
                     insert_ticket_log(
                         ticket_id=int(ticket['id']),
                         order_number=ticket['order_number'],
-                        action="Comment added",
-                        comment=new_comment,
+                        action="Comment added" if not uploaded_file else "Comment with attachment added",
+                        comment=comment_text,
                         by_user=logged_in_user
                     )
                     # st.success("Comment added successfully!")
                     st.rerun()
                 else:
-                    st.warning("Please enter a comment.")
+                    st.warning("Please enter a comment or attach a file.")
+        
+        st.markdown("---")
+        
+        # Show attachments section
+        st.subheader("📎 Attachments")
+        attachments = get_ticket_attachments(int(ticket['id']))
+        if not attachments.empty:
+            for idx, attachment in attachments.iterrows():
+                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                with col1:
+                    st.write(f"📄 {attachment['file_name']}")
+                with col2:
+                    st.write(f"{attachment['file_size']} bytes")
+                with col3:
+                    st.write(attachment['uploaded_at'].strftime('%Y-%m-%d %H:%M'))
+                with col4:
+                    if st.button("Download", key=f"download_{attachment['id']}"):
+                        file_name, file_type, file_data = download_attachment(attachment['id'])
+                        if file_data:
+                            st.download_button(
+                                label=f"💾 {file_name}",
+                                data=file_data,
+                                file_name=file_name,
+                                mime=file_type,
+                                key=f"dl_{attachment['id']}"
+                            )
+        else:
+            st.info("No attachments for this ticket.")
         
         st.markdown("---")
         logs = None
@@ -319,10 +446,26 @@ def show():
     # ----------- MAIN/CREATE TICKET PAGE -----------
     if not st.session_state.show_create_ticket:
         st.subheader("All Tickets")
-        if st.button("➕ Create New Ticket"):
-            st.session_state.show_create_ticket = True
-            st.rerun()
+        
+        # Create button and search in the same row
+        col_create, col_search = st.columns([2, 3])
+        with col_create:
+            if st.button("➕ Create New Ticket"):
+                st.session_state.show_create_ticket = True
+                st.rerun()
+        with col_search:
+            search_term = st.text_input("", placeholder="🔍 Search by Ticket No, Order Number", key="ticket_search")
+        
         tickets = fetch_tickets()
+        
+        # Filter tickets based on search term
+        if not tickets.empty and search_term:
+            search_term = search_term.lower()
+            tickets = tickets[
+                tickets['id'].astype(str).str.lower().str.contains(search_term, na=False) |
+                tickets['order_number'].astype(str).str.lower().str.contains(search_term, na=False)
+        ]
+        
         if not tickets.empty:
             tickets = tickets.copy()
             tickets['View'] = tickets['id'].apply(lambda tid: f"view_{tid}")
@@ -449,6 +592,10 @@ def show():
             
             # Operational Remark (full width)
             operational_remark = st.text_area("Operational Remark")
+            
+            # File attachment for new ticket
+            uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png'], key="new_ticket_file_uploader")
+            
             status = "Open"  # Always set to Open for new tickets
             
             st.markdown("---")
@@ -463,13 +610,25 @@ def show():
                         ticket_date, order_number, agent_name, qc_on_off, priority, query_source, query_type,
                         reason, sub_reason, customer_comment, remark, case_count, operational_remark, agent, status
                     ))
-                    st.success("Ticket created successfully!")
                     
                     # Get the last inserted ticket id
                     with get_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute("SELECT id FROM tickets WHERE order_number=%s ORDER BY id DESC LIMIT 1", (order_number,))
                             new_ticket_id = cur.fetchone()[0]
+
+                    # Handle file upload if a file is attached
+                    if uploaded_file is not None:
+                        # Save the file to database and get the attachment ID
+                        attachment_id = save_file_to_database(uploaded_file, new_ticket_id, logged_in_user)
+                        # Log the file attachment
+                        insert_ticket_log(
+                            ticket_id=new_ticket_id,
+                            order_number=order_number,
+                            action="File attached during ticket creation",
+                            comment=f"File attached: {uploaded_file.name}, Attachment ID: {attachment_id}",
+                            by_user=logged_in_user
+                        )
 
                     insert_ticket_log(
                         ticket_id=new_ticket_id,
@@ -479,6 +638,7 @@ def show():
                         by_user=logged_in_user
                     )
                     
+                    st.success("Ticket created successfully!")
                     st.session_state.show_create_ticket = False
                     st.rerun()
         

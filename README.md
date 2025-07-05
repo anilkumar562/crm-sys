@@ -1,8 +1,8 @@
 # crm-sys
 
-### tickets table
+### tickets TABLE
 
-```postgresql
+```sql
 CREATE TABLE tickets (
     id SERIAL PRIMARY KEY,
     ticket_date DATE,
@@ -23,9 +23,9 @@ CREATE TABLE tickets (
 );
 ```
 
-### ticket_logs table
+### ticket_logs TABLE
 
-```postgresql
+```sql
 CREATE TABLE ticket_logs (
     id SERIAL PRIMARY KEY,
     ticket_id INTEGER NOT NULL,
@@ -35,4 +35,18 @@ CREATE TABLE ticket_logs (
     comment TEXT,                         
     by_user VARCHAR(100) NOT NULL        
  );
+```
+### ticket_attachments TABLE
+
+```sql
+CREATE TABLE ticket_attachments (
+    id SERIAL PRIMARY KEY,
+    ticket_id INTEGER NOT NULL,
+    file_name VARCHAR(255) NOT NULL,              
+    file_type VARCHAR(100),                    
+    file_size INTEGER,                           
+    uploaded_at TIMESTAMP NOT NULL,          
+    uploaded_by VARCHAR(100),                      
+    file_data BYTEA NOT NULL                       
+);
 ```

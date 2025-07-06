@@ -3,6 +3,7 @@ import psycopg2
 import pandas as pd
 from datetime import datetime
 import os
+import yaml
 
 # Database connection details
 DB_HOST = "localhost"
@@ -10,83 +11,26 @@ DB_NAME = "database"
 DB_USER = "anil"
 DB_PASS = "9409030562"
 
-# Dropdown options
-QUERY_SOURCES = [
-    "Mobile", "WhatsApp", "InstaGram", "Gmail", "Facebook"
-]
+# Load dropdown options from YAML file
+def load_dropdown_config():
+    """Load dropdown configuration from YAML file"""
+    try:
+        yaml_path = os.path.join(os.path.dirname(__file__), 'dropdowns.yaml')
+        with open(yaml_path, 'r', encoding='utf-8') as file:
+            config = yaml.safe_load(file)
+            return config
+    except FileNotFoundError:
+        st.error("dropdowns.yaml file not found. Please ensure it exists in the modules folder.")
+        return {"sources": [], "query_type_reason_subreason": {}}
+    except yaml.YAMLError as e:
+        st.error(f"Error parsing dropdowns.yaml: {e}")
+        return {"sources": [], "query_type_reason_subreason": {}}
 
-QUERY_TYPE_REASON_SUBREASON = {
-    "Return": {
-        "Return Arrange": [
-            "Quality Issue",
-            "Color Issue",
-            "Damaged",
-            "Wrong Product",
-            "Fabric Issue"
-        ],
-        "Re-Arrange": [
-            "Tag Issue",
-            "Image Issue",
-            "Color Issue",
-            "Pickup boy not come",
-            "Pickup Delayed"
-        ],
-        "Pickup Pending": [],
-        "Cancel Request": []
-    },
-    "Exchange": {
-        "Size Issue": ["Big Size", "Small Size"],
-        "Color Issue": [],
-        "Damaged": [],
-        "Wrong Product": [],
-        "Fabric Issue": [],
-        "Cancel Request": [],
-        "Re-Arrange": []
-    },
-    "Refund": {
-        "RTO Refund": [],
-        "Cancel Refund": [],
-        "Missing Product": [],
-        "Wrong Delivered Mark": [],
-        "Return Product": [],
-        "Lost": [],
-        "Coupon Code": [],
-        "Damaged": []
-    },
-    "Dispatch": {
-        "COD": [
-            "Pickup Pending",
-            "Missing Product",
-            "Wrong Delivered Mark"
-        ],
-        "Prepaid": [
-            "Pickup Pending",
-            "Missing Product",
-            "Wrong Delivered Mark"
-        ]
-    },
-    "Order Cancel": {
-        "COD": [
-            "Placed By Mistake",
-            "Out of station",
-            "Pickup Pending",
-            "Out of Stock",
-            "Find other Product"
-        ],
-        "Prepaid": [
-            "Placed By Mistake",
-            "Out of station",
-            "Pickup Pending",
-            "Out of Stock",
-            "Find other Product"
-        ]
-    },
-    "Delivery Issue": {
-        "Wrong Status Marked": [],
-        "Wrong product Delivered": []
-    },
-    "Review Coupon": {}
-}
+# Load configuration
+dropdown_config = load_dropdown_config()
+QUERY_SOURCES = dropdown_config.get('sources', [])
+QUERY_TYPE_REASON_SUBREASON = dropdown_config.get('query_type_reason_subreason', {})
+AGENTS = dropdown_config.get('agents', [])
 
 def get_connection():
     return psycopg2.connect(
@@ -277,7 +221,8 @@ def show():
         with col3:
             st.selectbox("Query Source", QUERY_SOURCES, index=QUERY_SOURCES.index(ticket['query_source']), disabled=True)
         with col4:
-            st.text_input("Agent", value=ticket['agent'], disabled=True)
+            agent_index = AGENTS.index(ticket['agent']) if ticket['agent'] in AGENTS else 0
+            st.selectbox("Agent", AGENTS, index=agent_index, disabled=True)
 
         # Query Type, Reason, Sub Reason (disabled)
         st.selectbox("Query Type", list(QUERY_TYPE_REASON_SUBREASON.keys()), index=list(QUERY_TYPE_REASON_SUBREASON.keys()).index(ticket['query_type']), disabled=True)
@@ -613,8 +558,11 @@ def show():
             with col3:
                 query_source = st.selectbox("Query Source", QUERY_SOURCES)
             with col4:
-                # Auto-populate agent field with logged in user
-                agent = st.text_input("Agent", value=logged_in_user)
+                # Auto-select agent based on logged in user, or default to first agent
+                default_agent_index = 0
+                if logged_in_user in AGENTS:
+                    default_agent_index = AGENTS.index(logged_in_user)
+                agent = st.selectbox("Agent", AGENTS, index=default_agent_index)
             
             # Dynamic fields for real-time updates
             query_type = st.selectbox("Query Type", list(QUERY_TYPE_REASON_SUBREASON.keys()))

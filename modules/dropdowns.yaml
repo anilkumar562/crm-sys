@@ -1,0 +1,74 @@
+sources:
+  - Mobile
+  - WhatsApp
+  - Instagram
+  - Gmail
+  - Facebook
+
+agents:
+  - Ritu
+  - Dimpal
+  - Ankit
+  - Anil
+
+query_type_reason_subreason:
+  Return:
+    Return Arrange:
+      - Quality Issue
+      - Color Issue
+      - Damaged
+      - Wrong Product
+      - Fabric Issue
+    Re-Arrange:
+      - Tag Issue
+      - Image Issue
+      - Color Issue
+      - Pickup boy not come
+      - Pickup Delayed
+    Pickup Pending: []
+    Cancel Request: []
+  Exchange:
+    Size Issue:
+      - Big Size
+      - Small Size
+    Color Issue: []
+    Damaged: []
+    Wrong Product: []
+    Fabric Issue: []
+    Cancel Request: []
+    Re-Arrange: []
+  Refund:
+    RTO Refund: []
+    Cancel Refund: []
+    Missing Product: []
+    Wrong Delivered Mark: []
+    Return Product: []
+    Lost: []
+    Coupon Code: []
+    Damaged: []
+  Dispatch:
+    COD:
+      - Pickup Pending
+      - Missing Product
+      - Wrong Delivered Mark
+    Prepaid:
+      - Pickup Pending
+      - Missing Product
+      - Wrong Delivered Mark
+  Order Cancel:
+    COD:
+      - Placed By Mistake
+      - Out of station
+      - Pickup Pending
+      - Out of Stock
+      - Find other Product
+    Prepaid:
+      - Placed By Mistake
+      - Out of station
+      - Pickup Pending
+      - Out of Stock
+      - Find other Product
+  Delivery Issue:
+    Wrong Status Marked: []
+    Wrong product Delivered: []
+  Review Coupon: {}

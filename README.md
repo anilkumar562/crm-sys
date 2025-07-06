@@ -57,7 +57,7 @@ A comprehensive Customer Relationship Management (CRM) ticketing system built wi
 
 ### Main Ticket Management App
 ```bash
-streamlit run modules/streamlit_ticket_app.py
+ticket_app.py
 ```
 - Complete ticket CRUD operations
 - User authentication and role management
@@ -66,20 +66,12 @@ streamlit run modules/streamlit_ticket_app.py
 
 ### Analytics Dashboard
 ```bash
-streamlit run modules/ticket_dashboard.py
+ticket_dashboard.py
 ```
 - Comprehensive analytics and reporting
 - Interactive visualizations
 - Performance metrics and KPIs
 - Real-time data insights
-
-### Standalone Dashboard App
-```bash
-streamlit run dashboard_app.py
-```
-- Combined navigation interface
-- Dashboard and ticket management integration
-- Modern UI with sidebar navigation
 
 ## Database Schema
 
@@ -133,3 +125,13 @@ CREATE TABLE ticket_attachments (
     file_data BYTEA NOT NULL                       
 );
 ```
+
+---
+
+## 👨‍💻 Developer
+
+**Developed by: Anil**
+
+This CRM Ticket Management System was designed and developed to provide a comprehensive solution for customer support operations. The system combines modern web technologies with robust database management to deliver an efficient and user-friendly ticketing platform.
+
+For questions, suggestions, or contributions, please feel free to reach out.

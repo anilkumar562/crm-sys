@@ -229,6 +229,24 @@ def download_attachment(attachment_id):
     return None, None, None
 
 def show():
+    # Global CSS to hide file uploader help text but keep label
+    st.markdown("""
+    <style>
+    .stFileUploader > label + div > div > div > div:nth-child(2) {
+        display: none !important;
+    }
+    .stFileUploader small {
+        display: none !important;
+    }
+    .stFileUploader > label + div small {
+        display: none !important;
+    }
+    .stFileUploader > label + div p {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     if 'show_create_ticket' not in st.session_state:
         st.session_state.show_create_ticket = False
     if 'view_ticket_id' not in st.session_state:
@@ -280,14 +298,14 @@ def show():
         # Customer Comment and Remark side by side (disabled)
         col5, col6 = st.columns(2)
         with col5:
-            st.text_area("Customer Comment", value=ticket['customer_comment'], disabled=True, height=77)
+            st.text_area("Customer Comment", value=ticket['customer_comment'], disabled=True, height=70)
         with col6:
-            st.text_area("Remark", value=ticket['remark'], disabled=True, height=77)
+            st.text_area("Remark", value=ticket['remark'], disabled=True, height=70)
 
         # Operational Remark and File attachment side by side
         col7, col8 = st.columns(2)
         with col7:
-            operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "", height=77)
+            operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "", height=70)
         with col8:
             uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png', 'mp4', 'mkv', 'mp3'], key="file_uploader")
 
@@ -621,14 +639,14 @@ def show():
             # Customer Comment and Remark side by side
             col5, col6 = st.columns(2)
             with col5:
-                customer_comment = st.text_area("Customer Comment", height=77)
+                customer_comment = st.text_area("Customer Comment", height=70)
             with col6:
-                remark = st.text_area("Remark", height=77)
+                remark = st.text_area("Remark", height=70)
             
             # Operational Remark and File attachment side by side
             col7, col8 = st.columns(2)
             with col7:
-                operational_remark = st.text_area("Operational Remark", height=77)
+                operational_remark = st.text_area("Operational Remark", height=70)
             with col8:
                 uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png', 'mp4', 'mkv', 'mp3'], key="new_ticket_file_uploader")
             

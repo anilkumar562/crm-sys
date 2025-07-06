@@ -266,26 +266,6 @@ def show():
         for idx, (reason, count) in enumerate(reason_counts.items(), 1):
             st.write(f"{idx}. {reason}: **{count}** tickets")
     
-    # Recent Activity
-    st.subheader("🕒 Recent Activity")
-    
-    if not logs_df.empty:
-        recent_logs = logs_df.head(10)
-        
-        for _, log in recent_logs.iterrows():
-            time_str = log['log_time'].strftime('%Y-%m-%d %H:%M:%S')
-            st.markdown(
-                f"""
-                <div style="border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px;">
-                    <b>Ticket #{log['ticket_id']}</b> - {log['action']} 
-                    <br><small style="color:#666;">{time_str} by {log['by_user']}</small>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-    else:
-        st.info("No recent activity found.")
-    
     # Agent Performance Table
     st.subheader("👤 Agent Performance")
     

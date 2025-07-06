@@ -241,11 +241,8 @@ def show():
             st.error("Ticket not found.")
             st.session_state.view_ticket_id = None
             st.rerun()
-        st.subheader(f"🎫 Ticket #{ticket['id']} Details")
+        st.subheader(f"🎫 Ticket #{ticket['id']} Details - {ticket['ticket_date'].strftime('%Y-%m-%d')}")
         st.markdown("---")
-
-        # Ticket Date (disabled) - moved above Order Number
-        st.text_input("Ticket Date", value=str(ticket['ticket_date']), disabled=True)
 
         # Order Number (disabled)
         st.text_input("Order Number", value=ticket['order_number'], disabled=True)
@@ -283,15 +280,16 @@ def show():
         # Customer Comment and Remark side by side (disabled)
         col5, col6 = st.columns(2)
         with col5:
-            st.text_area("Customer Comment", value=ticket['customer_comment'], disabled=True)
+            st.text_area("Customer Comment", value=ticket['customer_comment'], disabled=True, height=77)
         with col6:
-            st.text_area("Remark", value=ticket['remark'], disabled=True)
+            st.text_area("Remark", value=ticket['remark'], disabled=True, height=77)
 
-        # Operational Remark (editable)
-        operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "")
-        
-        # File attachment (same width as Operational Remark)
-        uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png'], key="file_uploader")
+        # Operational Remark and File attachment side by side
+        col7, col8 = st.columns(2)
+        with col7:
+            operational_remark = st.text_area("Operational Remark", value=ticket['operational_remark'] or "", height=77)
+        with col8:
+            uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png', 'mp4', 'mkv', 'mp3'], key="file_uploader")
 
         # Status (editable)
         status = st.selectbox(
@@ -387,33 +385,68 @@ def show():
         
         st.markdown("---")
         
-        # Show attachments section
-        st.subheader("📎 Attachments")
+        # Show attachments section only if attachments exist
         attachments = get_ticket_attachments(int(ticket['id']))
         if not attachments.empty:
+            st.subheader("📎 Attachments")
             for idx, attachment in attachments.iterrows():
-                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-                with col1:
-                    st.write(f"📄 {attachment['file_name']}")
-                with col2:
-                    st.write(f"{attachment['file_size']} bytes")
-                with col3:
-                    st.write(attachment['uploaded_at'].strftime('%Y-%m-%d %H:%M'))
-                with col4:
-                    if st.button("Download", key=f"download_{attachment['id']}"):
+                # Preview expander with file name only
+                with st.expander(f"📄 {attachment['file_name']}", expanded=False):
+                    # File details row inside expander
+                    col1, col2, col3, col4 = st.columns([3, 1, 2, 1])
+                    with col1:
+                        st.write(f"**File:** {attachment['file_name']}")
+                    with col2:
+                        st.write(f"**Size:** {attachment['file_size']} bytes")
+                    with col3:
+                        st.write(f"**Uploaded:** {attachment['uploaded_at'].strftime('%Y-%m-%d %H:%M')}")
+                    with col4:
+                        # Download button inside expander
                         file_name, file_type, file_data = download_attachment(attachment['id'])
                         if file_data:
                             st.download_button(
-                                label=f"💾 {file_name}",
+                                label="Download",
                                 data=file_data,
                                 file_name=file_name,
                                 mime=file_type,
-                                key=f"dl_{attachment['id']}"
+                                key=f"dl_{attachment['id']}",
+                                use_container_width=True
                             )
-        else:
-            st.info("No attachments for this ticket.")
+                    
+                    st.markdown("---")  # Separator between details and preview
+                    
+                    # File preview content
+                    if file_data:
+                        # Check if it's an image
+                        if file_type and file_type.startswith('image/') or file_name.lower().endswith(('.jpg', '.jpeg', '.png')):
+                            st.image(file_data, caption=file_name, use_container_width=True)
+                        # Check if it's a video
+                        elif file_type and file_type.startswith('video/') or file_name.lower().endswith(('.mp4', '.mkv')):
+                            st.video(file_data)
+                        # Check if it's audio
+                        elif file_type and file_type.startswith('audio/') or file_name.lower().endswith('.mp3'):
         
-        st.markdown("---")
+                            st.audio(file_data)
+                        # Check if it's a PDF
+                        elif file_type == 'application/pdf' or file_name.lower().endswith('.pdf'):
+                            # Display PDF using iframe with base64 encoding
+                            import base64
+                            base64_pdf = base64.b64encode(file_data).decode('utf-8')
+                            pdf_display = f"""
+                            <iframe src="data:application/pdf;base64,{base64_pdf}" 
+                                    width="100%" height="600px" type="application/pdf">
+                                <p>Your browser does not support PDFs. 
+                                <a href="data:application/pdf;base64,{base64_pdf}" download="{file_name}">Download the PDF</a>.</p>
+                            </iframe>
+                            """
+                            st.markdown(pdf_display, unsafe_allow_html=True)
+                            
+                        else:
+                            st.info(f"Preview not available for {file_type}. Use download button above to view the file.")
+                    else:
+                        st.error("Could not load file for preview.")
+            
+            st.markdown("---")
         logs = None
         with get_connection() as conn:
             logs = pd.read_sql(
@@ -454,7 +487,7 @@ def show():
                 st.session_state.show_create_ticket = True
                 st.rerun()
         with col_search:
-            search_term = st.text_input("", placeholder="🔍 Search by Ticket No, Order Number", key="ticket_search")
+            search_term = st.text_input("🔍 Search by Ticket No, Order Number", placeholder="🔍 Search by Ticket No, Order Number", key="ticket_search", label_visibility="collapsed")
         
         tickets = fetch_tickets()
         
@@ -480,12 +513,14 @@ def show():
             header_cols[4].markdown("**Status**")
             header_cols[5].markdown("**Ticket Date**")
             header_cols[6].markdown("**Action**")
-            # Ticket rows with 1px border between
+            # Ticket rows with subtle borders
             for idx, row in tickets.iterrows():
-                st.markdown(
-                    '<div style="border-top:1px solid #ddd; margin-top:0; margin-bottom:0;"></div>',
-                    unsafe_allow_html=True
-                )
+                # Add a subtle border between rows
+                if idx > 0:  # Don't add border before first row
+                    st.markdown(
+                        '<div style="border-top:1px solid #f0f0f0; margin:2px 0;"></div>',
+                        unsafe_allow_html=True
+                    )
                 cols = st.columns([1, 2, 2, 2, 2, 2, 1])
                 cols[0].write(row['id'])  # Ticket No
                 cols[1].write(row['order_number'])
@@ -586,15 +621,16 @@ def show():
             # Customer Comment and Remark side by side
             col5, col6 = st.columns(2)
             with col5:
-                customer_comment = st.text_area("Customer Comment")
+                customer_comment = st.text_area("Customer Comment", height=77)
             with col6:
-                remark = st.text_area("Remark")
+                remark = st.text_area("Remark", height=77)
             
-            # Operational Remark (full width)
-            operational_remark = st.text_area("Operational Remark")
-            
-            # File attachment for new ticket
-            uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png'], key="new_ticket_file_uploader")
+            # Operational Remark and File attachment side by side
+            col7, col8 = st.columns(2)
+            with col7:
+                operational_remark = st.text_area("Operational Remark", height=77)
+            with col8:
+                uploaded_file = st.file_uploader("📎 Attach File", type=['pdf', 'jpg', 'jpeg', 'png', 'mp4', 'mkv', 'mp3'], key="new_ticket_file_uploader")
             
             status = "Open"  # Always set to Open for new tickets
             

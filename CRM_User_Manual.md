@@ -27,7 +27,7 @@
 3. Enter your username and password
 4. Click "Login" to access the system
 
-**[IMAGE PLACEHOLDER: Login screen showing username/password fields]**
+![login](Assets/login.png)
 
 ### Main Interface Overview
 Once logged in, you'll see the main dashboard with:

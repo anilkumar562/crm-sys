@@ -1,18 +1,5 @@
 # CRM Ticket Management System - User Manual
 
-## Table of Contents
-1. [Getting Started](#getting-started)
-2. [User Roles and Permissions](#user-roles-and-permissions)
-3. [Creating Your First Ticket](#creating-your-first-ticket)
-4. [Managing Tickets](#managing-tickets)
-5. [File Attachments](#file-attachments)
-6. [Comments and Communication](#comments-and-communication)
-7. [Dashboard and Analytics](#dashboard-and-analytics)
-8. [Advanced Features](#advanced-features)
-9. [Troubleshooting](#troubleshooting)
-10. [Best Practices](#best-practices)
-
----
 
 ## Getting Started
 
